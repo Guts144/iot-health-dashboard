@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Health Monitor Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <!-- Chart.js for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- IMPORTANT: Add a date adapter for Chart.js AFTER Chart.js itself -->
+    <!-- Changed CDN from jsdelivr to unpkg due to MIME type issue -->
+    <script src="https://unpkg.com/chartjs-adapter-date-fns"></script>
+
+    <!-- Socket.IO client library -->
+    <script src="/socket.io/socket.io.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-gray-100 font-inter text-gray-800 antialiased">
+    <div class="min-h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-4 shadow-lg rounded-b-lg">
+            <div class="container mx-auto flex justify-between items-center">
+                <h1 class="text-3xl font-bold">IoT Health Monitor</h1>
+                <span class="text-sm">Real-time Patient Data</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container mx-auto p-6 flex-grow">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <!-- Current Status Card -->
+                <div class="bg-white p-6 rounded-xl shadow-md flex flex-col items-center justify-center">
+                    <h2 class="text-xl font-semibold mb-4 text-center">Current Health Status</h2>
+                    <div id="healthStatusIndicator" class="w-24 h-24 rounded-full flex items-center justify-center text-white text-lg font-bold shadow-lg transition-colors duration-300 bg-green-500">
+                        NORMAL
+                    </div>
+                    <p class="mt-4 text-gray-600 text-center">Overall system status based on sensor data.</p>
+                </div>
+
+                <!-- Live Sensor Values Card -->
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-xl font-semibold mb-4">Live Sensor Values</h2>
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                            <span class="font-medium text-blue-800">Body Temperature:</span>
+                            <span id="currentBodyTemp" class="text-2xl font-bold text-blue-600">--.- °C</span>
+                        </div>
+                        <div class="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                            <span class="font-medium text-purple-800">Ambient Temperature:</span>
+                            <span id="currentAmbientTemp" class="text-2xl font-bold text-purple-600">--.- °C</span>
+                        </div>
+                        <div class="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
+                            <span class="font-medium text-yellow-800">Fall Detected:</span>
+                            <span id="currentFallStatus" class="text-2xl font-bold text-yellow-600">NO</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Threshold Settings Card -->
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-xl font-semibold mb-4">Monitoring Thresholds</h2>
+                    <form id="thresholdForm" class="space-y-4">
+                        <div>
+                            <label for="maxBodyTemp" class="block text-sm font-medium text-gray-700 mb-1">Max Body Temperature (°C):</label>
+                            <input type="number" id="maxBodyTemp" name="Max Body Temp" step="0.1" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label for="fallSensitivity" class="block text-sm font-medium text-gray-700 mb-1">Fall Detection Sensitivity (g):</label>
+                            <input type="number" id="fallSensitivity" name="Fall Detection Sensitivity" step="0.01" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                            <p class="text-xs text-gray-500 mt-1">*(Note: This value is illustrative; actual MPU sensitivity tuning happens on ESP32.)</p>
+                        </div>
+                        <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200">
+                            Update Thresholds
+                        </button>
+                        <div id="thresholdMessage" class="text-sm mt-2 text-center"></div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <!-- Added h-96 (height: 24rem) to constrain chart height -->
+                <div class="bg-white p-6 rounded-xl shadow-md h-96">
+                    <h2 class="text-xl font-semibold mb-4">Body Temperature Trend</h2>
+                    <canvas id="bodyTempChart"></canvas>
+                </div>
+                <!-- Added h-96 (height: 24rem) to constrain chart height -->
+                <div class="bg-white p-6 rounded-xl shadow-md h-96">
+                    <h2 class="text-xl font-semibold mb-4">Ambient Temperature Trend</h2>
+                    <canvas id="ambientTempChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Alerts Section -->
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h2 class="text-xl font-semibold mb-4">Recent Alerts</h2>
+                <div id="alertsList" class="space-y-3">
+                    <!-- Alerts will be dynamically loaded here -->
+                    <p class="text-gray-500 text-center" id="noAlertsMessage">No active alerts.</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-gray-800 text-white p-4 text-center mt-8 rounded-t-lg">
+            <p>&copy; 2025 IoT Health Monitor. Developed by Mohamed Gharsalli.</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
